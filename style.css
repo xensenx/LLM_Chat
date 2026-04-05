@@ -62,6 +62,9 @@ body.theme-oled {
 
 html, body {
   height: 100%;
+  width: 100%;
+  position: fixed; /* CRITICAL: Prevents mobile bounce/elastic scrolling */
+  inset: 0;
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
@@ -75,9 +78,9 @@ html, body {
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;  /* Fallback for older browsers */
-  height: 100dvh; /* Modern dynamic viewport height */
-  position: relative;
+  position: absolute;
+  inset: 0; /* Anchors strictly to top, right, bottom, left */
+  overflow: hidden;
 }
 
 /* ─── Header ────────────────────────────────────────────── */
@@ -112,13 +115,12 @@ html, body {
 
 /* ─── Chat Container ────────────────────────────────────── */
 .chat-container {
-  flex: 1; overflow-y: auto; overflow-x: hidden;
+  flex: 1; 
+  min-height: 0; /* CRITICAL: Prevents flex children from overflowing bounds */
+  overflow-y: auto; overflow-x: hidden;
   overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   padding: 20px 0 8px;
 }
-.chat-container::-webkit-scrollbar { width: 4px; }
-.chat-container::-webkit-scrollbar-track { background: transparent; }
-.chat-container::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 2px; }
 
 /* ─── Welcome State ─────────────────────────────────────── */
 .welcome-state {
