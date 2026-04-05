@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>NIM Chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <!-- Settings Drawer Overlay -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+
+  <!-- Settings Drawer -->
+  <aside class="settings-drawer" id="settingsDrawer">
+    <div class="drawer-header">
+      <span class="drawer-title">Settings</span>
+      <button class="drawer-close" id="drawerClose" aria-label="Close settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="drawer-section">
+      <label class="section-label" for="modelSelect">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Model
+      </label>
+      <div class="select-wrapper">
+        <select id="modelSelect">
+          <option value="">Loading models…</option>
+        </select>
+        <svg class="select-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <button class="refresh-btn" id="refreshModels">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+        Refresh models
+      </button>
+    </div>
+
+    <div class="drawer-section">
+      <label class="section-label" for="personaInput">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        System Prompt
+      </label>
+      <textarea id="personaInput" placeholder="Define the AI's behavior, personality, or role…" rows="6"></textarea>
+      <span class="section-hint">Applied as the system message at the start of every conversation.</span>
+    </div>
+
+    <div class="drawer-section">
+      <label class="section-label">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Parameters
+      </label>
+      <div class="param-row">
+        <span class="param-label">Temperature</span>
+        <div class="param-controls">
+          <input type="range" id="tempSlider" min="0" max="2" step="0.05" value="0.7" />
+          <span class="param-value" id="tempValue">0.7</span>
+        </div>
+      </div>
+      <div class="param-row">
+        <span class="param-label">Max tokens</span>
+        <div class="param-controls">
+          <input type="range" id="maxTokensSlider" min="256" max="4096" step="64" value="1024" />
+          <span class="param-value" id="maxTokensValue">1024</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-section drawer-actions">
+      <button class="action-btn danger" id="clearChat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        Clear conversation
+      </button>
+    </div>
+  </aside>
+
+  <!-- App Shell -->
+  <div class="app-shell">
+    <!-- Header -->
+    <header class="app-header">
+      <button class="icon-btn" id="menuBtn" aria-label="Open settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="header-center">
+        <span class="header-model-name" id="headerModelName">NIM Chat</span>
+      </div>
+      <button class="icon-btn" id="newChatBtn" aria-label="New chat">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </header>
+
+    <!-- Chat Container -->
+    <main class="chat-container" id="chatContainer">
+      <div class="welcome-state" id="welcomeState">
+        <div class="welcome-icon">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <p class="welcome-title">Ready to chat</p>
+        <p class="welcome-sub">Select a model in settings and start a conversation.</p>
+      </div>
+      <div class="messages-list" id="messagesList"></div>
+    </main>
+
+    <!-- Input Area -->
+    <footer class="input-area">
+      <div class="input-wrapper">
+        <textarea
+          id="messageInput"
+          placeholder="Message…"
+          rows="1"
+          maxlength="32000"
+        ></textarea>
+        <button class="send-btn" id="sendBtn" aria-label="Send message" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
