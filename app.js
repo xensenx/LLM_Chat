@@ -2,19 +2,19 @@
 'use strict';
 
 // ── Constants ──────────────────────────────────────────────
-const PARENT_CONTEXT = 'You are currently operating inside an application called NimChat. You are one of many models the user can dynamically select. Be helpful, concise, and aware that the user may switch models mid-conversation.';
+const PARENT_CONTEXT = 'You are currently operating inside an application called NimChat. A Multi-Model chat interface developed by xensenx github link : https://github.com/xensenx, You are one of many models the user can dynamically select.  Be helpful, concise, and aware that the user may switch models mid-conversation. ';
 
 // ── State ──────────────────────────────────────────────────
 const state = {
-  sessions:       [],       // all saved sessions
+  sessions: [],       // all saved sessions
   activeSessionId: null,    // currently active session ID
-  isLoading:      false,
-  selectedModel:  '',
+  isLoading: false,
+  selectedModel: '',
   activePersonaId: null,    // key of active persona in personas map
-  personas:       {},       // { id: { title, prompt } }
-  temperature:    0.7,
-  maxTokens:      1024,
-  pendingFiles:   [],       // { file, type:'image'|'pdf', previewUrl?, extractedText?, base64? }
+  personas: {},       // { id: { title, prompt } }
+  temperature: 0.7,
+  maxTokens: 1024,
+  pendingFiles: [],       // { file, type:'image'|'pdf', previewUrl?, extractedText?, base64? }
 };
 
 // ── Helpers: sessions ──────────────────────────────────────
@@ -44,10 +44,10 @@ function generateTitle(text) {
 
 function createSession(model) {
   return {
-    id:        generateId(),
-    title:     'New conversation',
-    model:     model || state.selectedModel,
-    messages:  [],
+    id: generateId(),
+    title: 'New conversation',
+    model: model || state.selectedModel,
+    messages: [],
     createdAt: Date.now(),
   };
 }
@@ -67,47 +67,47 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 function saveSessions() { LS.set('nim_sessions', state.sessions); }
-function savePersonas()  { LS.set('nim_personas', state.personas); }
+function savePersonas() { LS.set('nim_personas', state.personas); }
 
 // ── DOM refs ───────────────────────────────────────────────
 const els = {
-  menuBtn:          document.getElementById('menuBtn'),
-  newChatBtn:       document.getElementById('newChatBtn'),
-  settingsDrawer:   document.getElementById('settingsDrawer'),
-  drawerOverlay:    document.getElementById('drawerOverlay'),
-  drawerClose:      document.getElementById('drawerClose'),
-  modelSelect:      document.getElementById('modelSelect'),
-  refreshModels:    document.getElementById('refreshModels'),
-  exportChat:       document.getElementById('exportChat'),
-  clearChat:        document.getElementById('clearChat'),
-  sessionList:      document.getElementById('sessionList'),
-  openSettings:     document.getElementById('openSettings'),
+  menuBtn: document.getElementById('menuBtn'),
+  newChatBtn: document.getElementById('newChatBtn'),
+  settingsDrawer: document.getElementById('settingsDrawer'),
+  drawerOverlay: document.getElementById('drawerOverlay'),
+  drawerClose: document.getElementById('drawerClose'),
+  modelSelect: document.getElementById('modelSelect'),
+  refreshModels: document.getElementById('refreshModels'),
+  exportChat: document.getElementById('exportChat'),
+  clearChat: document.getElementById('clearChat'),
+  sessionList: document.getElementById('sessionList'),
+  openSettings: document.getElementById('openSettings'),
   // modal
-  modalOverlay:     document.getElementById('modalOverlay'),
-  settingsModal:    document.getElementById('settingsModal'),
-  modalClose:       document.getElementById('modalClose'),
-  personaSelect:    document.getElementById('personaSelect'),
+  modalOverlay: document.getElementById('modalOverlay'),
+  settingsModal: document.getElementById('settingsModal'),
+  modalClose: document.getElementById('modalClose'),
+  personaSelect: document.getElementById('personaSelect'),
   deletePersonaBtn: document.getElementById('deletePersonaBtn'),
-  personaTitleInput:document.getElementById('personaTitleInput'),
-  personaInput:     document.getElementById('personaInput'),
-  savePersonaBtn:   document.getElementById('savePersonaBtn'),
-  tempSlider:       document.getElementById('tempSlider'),
-  tempValue:        document.getElementById('tempValue'),
-  maxTokensSlider:  document.getElementById('maxTokensSlider'),
-  maxTokensValue:   document.getElementById('maxTokensValue'),
-  themeSwitcher:    document.getElementById('themeSwitcher'),
+  personaTitleInput: document.getElementById('personaTitleInput'),
+  personaInput: document.getElementById('personaInput'),
+  savePersonaBtn: document.getElementById('savePersonaBtn'),
+  tempSlider: document.getElementById('tempSlider'),
+  tempValue: document.getElementById('tempValue'),
+  maxTokensSlider: document.getElementById('maxTokensSlider'),
+  maxTokensValue: document.getElementById('maxTokensValue'),
+  themeSwitcher: document.getElementById('themeSwitcher'),
   // chat
-  headerModelName:  document.getElementById('headerModelName'),
-  chatContainer:    document.getElementById('chatContainer'),
-  messagesList:     document.getElementById('messagesList'),
-  welcomeState:     document.getElementById('welcomeState'),
-  scrollAnchor:     document.getElementById('scrollAnchor'),
+  headerModelName: document.getElementById('headerModelName'),
+  chatContainer: document.getElementById('chatContainer'),
+  messagesList: document.getElementById('messagesList'),
+  welcomeState: document.getElementById('welcomeState'),
+  scrollAnchor: document.getElementById('scrollAnchor'),
   // input
-  attachBtn:        document.getElementById('attachBtn'),
-  fileInput:        document.getElementById('fileInput'),
-  attachmentStrip:  document.getElementById('attachmentStrip'),
-  messageInput:     document.getElementById('messageInput'),
-  sendBtn:          document.getElementById('sendBtn'),
+  attachBtn: document.getElementById('attachBtn'),
+  fileInput: document.getElementById('fileInput'),
+  attachmentStrip: document.getElementById('attachmentStrip'),
+  messageInput: document.getElementById('messageInput'),
+  sendBtn: document.getElementById('sendBtn'),
 };
 
 // ── Markdown ───────────────────────────────────────────────
@@ -622,7 +622,7 @@ function isMultimodalError(status, body) {
 // DOM MESSAGE HELPERS
 // ─────────────────────────────────────────────────────────
 function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function appendUserMessageDOM(content, attachmentPreviews) {
@@ -795,7 +795,7 @@ async function handleSend() {
   // Build API user content
   let userContent;
   const hasImages = files.some(f => f.type === 'image');
-  const pdfTexts  = files.filter(f => f.type === 'pdf').map(f => `[Attached Document: ${f.name}]\n${f.extractedText}`);
+  const pdfTexts = files.filter(f => f.type === 'pdf').map(f => `[Attached Document: ${f.name}]\n${f.extractedText}`);
 
   if (hasImages) {
     // Multimodal: array content
@@ -835,8 +835,8 @@ async function handleSend() {
       model: state.selectedModel,
       messages: msgs,
       temperature: state.temperature,
-      max_tokens:  state.maxTokens,
-      stream:      true,
+      max_tokens: state.maxTokens,
+      stream: true,
     };
 
     const res = await fetch('/api/chat', {
