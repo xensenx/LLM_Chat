@@ -6,47 +6,57 @@ export async function onRequestGet(context) {
   const apiKey = context.env.NVIDIA_NIM_API_KEY;
 
   if (!apiKey) {
-    return new Response(
-      JSON.stringify({ error: 'NVIDIA_NIM_API_KEY environment variable is not set.' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return jsonError(500, 'NVIDIA_NIM_API_KEY is not configured on the server.');
   }
 
+  let upstream;
   try {
-    const upstream = await fetch('https://integrate.api.nvidia.com/v1/models', {
+    upstream = await fetch('https://integrate.api.nvidia.com/v1/models', {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization:  `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-      },
-    });
-
-    const body = await upstream.text();
-
-    return new Response(body, {
-      status: upstream.status,
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=300', // cache 5 min
-        'Access-Control-Allow-Origin': '*',
       },
     });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: 'Failed to fetch models', detail: err.message }),
-      { status: 502, headers: { 'Content-Type': 'application/json' } }
-    );
+    return jsonError(502, `Could not reach NVIDIA NIM: ${err.message}`);
   }
+
+  if (!upstream.ok) {
+    const errBody = await upstream.text();
+    let parsed;
+    try { parsed = JSON.parse(errBody); } catch { parsed = { error: { message: errBody } }; }
+    return new Response(JSON.stringify(parsed), {
+      status: upstream.status,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+
+  const body = await upstream.text();
+  return new Response(body, {
+    status: 200,
+    headers: {
+      'Content-Type':  'application/json',
+      'Cache-Control': 'public, max-age=300',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
 }
 
-/** Handle CORS preflight */
 export async function onRequestOptions() {
   return new Response(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin':  '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     },
+  });
+}
+
+function jsonError(status, message) {
+  return new Response(JSON.stringify({ error: { message } }), {
+    status,
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
   });
 }
