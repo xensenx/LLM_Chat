@@ -1,63 +1,50 @@
-/* ─── NIM Chat — Service Worker ─────────────────────────── */
-const CACHE_NAME = 'nimchat-v1';
+// sw.js
 
-// App shell assets to pre-cache on install
-const SHELL_ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
+// Versioning the cache
+const CACHE_NAME = 'v1';
+const CACHE_ASSETS = [
+    '/favicon.ico',
+    '/manifest.json',
+    // additional assets can be added here
 ];
 
-// ── Install: pre-cache shell ───────────────────────────────
+// Install event for caching assets
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
-  );
-  // Activate immediately without waiting for old SW to be cleared
-  self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => {
+            return cache.addAll(CACHE_ASSETS);
+        })
+    );
 });
 
-// ── Activate: clear old caches ────────────────────────────
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
-    )
-  );
-  // Take control of all open clients immediately
-  self.clients.claim();
-});
-
-// ── Fetch: Cache-first for shell, Network-only for API ────
+// Fetch event for network-first strategy
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
+    event.respondWith(
+        fetch(event.request)  // Try the network first
+            .then((response) => {
+                const responseClone = response.clone();
+                caches.open(CACHE_NAME).then((cache) => {
+                    cache.put(event.request, responseClone);  // Cache the response
+                });
+                return response;  // Return the network response
+            })
+            .catch(() => {
+                return caches.match(event.request);  // If network fails, serve cached content
+            })
+    );
+});
 
-  // Always go to network for API routes and cross-origin requests
-  if (url.pathname.startsWith('/api/') || url.origin !== self.location.origin) {
-    return; // Fall through to browser default (network)
-  }
-
-  // Cache-first strategy for same-origin shell assets
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-
-      // Not in cache — fetch from network and cache for next time
-      return fetch(request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
-        }
-        return networkResponse;
-      });
-    })
-  );
+// Activate event for cleaning up old caches
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.map((cacheName) => {
+                    if (CACHE_NAME !== cacheName) {
+                        return caches.delete(cacheName);  // Delete old caches
+                    }
+                })
+            );
+        })
+    );
 });
