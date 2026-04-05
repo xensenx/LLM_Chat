@@ -75,8 +75,8 @@ html, body {
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
-  height: 100vh;
+  height: 100vh;  /* Fallback for older browsers */
+  height: 100dvh; /* Modern dynamic viewport height */
   position: relative;
 }
 
