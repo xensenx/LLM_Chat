@@ -42,6 +42,19 @@ function generateTitle(text) {
   return text.trim().slice(0, 46) + (text.length > 46 ? '…' : '');
 }
 
+// ── Helpers: Vision Check ──────────────────────────────────
+function isVisionModel(modelId) {
+  if (!modelId) return false;
+  const id = modelId.toLowerCase();
+  // Matches common vision model naming conventions in NVIDIA NIM
+  return id.includes('vision') || 
+    id.includes('-vl') || 
+    id.includes('pixtral') || 
+    id.includes('llava') || 
+    id.includes('paligemma') ||
+    id.includes('kosmos');
+}
+
 function createSession(model) {
   return {
     id: generateId(),
@@ -184,7 +197,10 @@ async function fetchModels() {
     const data = await res.json();
     const models = (data.data || []).map(m => m.id).filter(Boolean).sort();
     els.modelSelect.innerHTML = models.length
-      ? models.map(id => `<option value="${escHtml(id)}">${escHtml(id)}</option>`).join('')
+      ? models.map(id => {
+        const label = isVisionModel(id) ? `${id} 👁️` : id;
+        return `<option value="${escHtml(id)}">${escHtml(label)}</option>`;
+      }).join('')
       : '<option value="">No models found</option>';
     const saved = LS.get('nim_model', '');
     if (saved && models.includes(saved)) { els.modelSelect.value = saved; state.selectedModel = saved; }
@@ -773,6 +789,14 @@ async function handleSend() {
   if (!state.selectedModel) {
     showToast('Please select a model first', 'error');
     openDrawer();
+    return;
+  }
+
+  // ── Prevent images from going to text-only models ──
+  const checkHasImages = files.some(f => f.type === 'image');
+  if (checkHasImages && !isVisionModel(state.selectedModel)) {
+    showToast('Please select a vision model (👁️) to analyze images.', 'error', 4000);
+    openDrawer(); // Pop open the sidebar so they can easily change the model
     return;
   }
 
