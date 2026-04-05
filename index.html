@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>NIM Chat</title>
+  <meta name="theme-color" content="#141414" />
+  <link rel="manifest" href="/manifest.json" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,6 +14,26 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
+  <!-- ── Password Gate Overlay ── -->
+  <div class="gate-overlay" id="gateOverlay">
+    <div class="gate-card">
+      <div class="gate-logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <p class="gate-title">NIM Chat</p>
+      <p class="gate-sub">Enter the app password to continue.</p>
+      <input
+        type="password"
+        id="gateInput"
+        class="text-input"
+        placeholder="Password…"
+        autocomplete="current-password"
+      />
+      <button class="send-btn gate-submit-btn" id="gateSubmit">Unlock</button>
+      <span class="gate-error" id="gateError"></span>
+    </div>
+  </div>
+
   <!-- Overlays -->
   <div class="drawer-overlay" id="drawerOverlay"></div>
   <div class="modal-overlay" id="modalOverlay"></div>
@@ -146,7 +168,7 @@
   </div>
 
   <!-- ── App Shell ── -->
-  <div class="app-shell">
+  <div class="app-shell" id="appShell">
     <header class="app-header">
       <button class="icon-btn" id="menuBtn" aria-label="Chat history">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -180,8 +202,13 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <textarea id="messageInput" placeholder="Message…" rows="1" maxlength="64000"></textarea>
+        <!-- Send button -->
         <button class="send-btn" id="sendBtn" aria-label="Send" disabled>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+        <!-- Stop button (visible during streaming) -->
+        <button class="stop-btn" id="stopBtn" aria-label="Stop generation">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
         </button>
       </div>
     </footer>
