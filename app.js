@@ -6,16 +6,36 @@ const PARENT_CONTEXT = 'You are currently operating inside an application called
 
 // ── State ──────────────────────────────────────────────────
 const state = {
-  sessions: [],       // all saved sessions
-  activeSessionId: null,    // currently active session ID
+  sessions: [],
+  activeSessionId: null,
   isLoading: false,
   selectedModel: '',
-  activePersonaId: null,    // key of active persona in personas map
-  personas: {},       // { id: { title, prompt } }
+  activePersonaId: null,
+  personas: {},
   temperature: 0.7,
   maxTokens: 1024,
-  pendingFiles: [],       // { file, type:'image'|'pdf', previewUrl?, extractedText?, base64? }
+  pendingFiles: [],     // { file, type:'image'|'pdf', previewUrl?, extractedText?, base64? }
+  appPassword: '',      // password entered at gate
+  abortController: null,// AbortController for stop generation
 };
+
+// ── Vision model heuristic ──────────────────────────────────
+function isVisionModel(modelId) {
+  try {
+    const s = String(modelId).toLowerCase();
+    return ['vision', '-vl', 'pixtral', 'llava', 'paligemma', 'kosmos'].some(k => s.includes(k));
+  } catch {
+    return false;
+  }
+}
+
+// ── Auth helpers ────────────────────────────────────────────
+function getAuthHeaders() {
+  if (state.appPassword) {
+    return { 'X-App-Password': state.appPassword };
+  }
+  return {};
+}
 
 // ── Helpers: sessions ──────────────────────────────────────
 function getActiveSession() {
@@ -41,8 +61,6 @@ function generateId() {
 function generateTitle(text) {
   return text.trim().slice(0, 46) + (text.length > 46 ? '…' : '');
 }
-
-
 
 function createSession(model) {
   return {
@@ -73,6 +91,13 @@ function savePersonas() { LS.set('nim_personas', state.personas); }
 
 // ── DOM refs ───────────────────────────────────────────────
 const els = {
+  // gate
+  gateOverlay: document.getElementById('gateOverlay'),
+  gateInput: document.getElementById('gateInput'),
+  gateSubmit: document.getElementById('gateSubmit'),
+  gateError: document.getElementById('gateError'),
+  appShell: document.getElementById('appShell'),
+  // sidebar
   menuBtn: document.getElementById('menuBtn'),
   newChatBtn: document.getElementById('newChatBtn'),
   settingsDrawer: document.getElementById('settingsDrawer'),
@@ -110,6 +135,7 @@ const els = {
   attachmentStrip: document.getElementById('attachmentStrip'),
   messageInput: document.getElementById('messageInput'),
   sendBtn: document.getElementById('sendBtn'),
+  stopBtn: document.getElementById('stopBtn'),
 };
 
 // ── Markdown ───────────────────────────────────────────────
@@ -139,6 +165,82 @@ function showToast(msg, type = 'info', duration = 3000) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toast.classList.remove('visible'), duration);
 }
+
+// ─────────────────────────────────────────────────────────
+// PASSWORD GATE
+// ─────────────────────────────────────────────────────────
+function showGate(errorMsg) {
+  els.gateOverlay.classList.add('visible');
+  els.gateError.textContent = errorMsg || '';
+  els.gateInput.focus();
+}
+
+function hideGate() {
+  els.gateOverlay.classList.remove('visible');
+}
+
+/**
+ * Probe /api/models with the current password.
+ * Returns true if the server accepted (200) or no password is needed (still 200).
+ * Returns false on 401. Throws on network errors.
+ */
+async function probeAuth(password) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (password) headers['X-App-Password'] = password;
+  const res = await fetch('/api/models', { headers });
+  return res.status !== 401;
+}
+
+async function initGate() {
+  const saved = localStorage.getItem('nim_app_password') || '';
+  state.appPassword = saved;
+
+  try {
+    const ok = await probeAuth(saved);
+    if (ok) {
+      hideGate();
+    } else {
+      showGate(saved ? 'Incorrect password — please try again.' : '');
+    }
+  } catch {
+    // Network error — hide gate anyway and let the main app handle errors
+    hideGate();
+  }
+}
+
+// Gate submit handler
+async function handleGateSubmit() {
+  const pw = els.gateInput.value.trim();
+  if (!pw) {
+    els.gateError.textContent = 'Please enter a password.';
+    return;
+  }
+  els.gateSubmit.disabled = true;
+  els.gateError.textContent = '';
+
+  try {
+    const ok = await probeAuth(pw);
+    if (ok) {
+      state.appPassword = pw;
+      localStorage.setItem('nim_app_password', pw);
+      hideGate();
+      // Reload models now that we have a valid password
+      await fetchModels();
+    } else {
+      els.gateError.textContent = 'Incorrect password. Try again.';
+      els.gateInput.select();
+    }
+  } catch {
+    els.gateError.textContent = 'Network error — could not connect.';
+  } finally {
+    els.gateSubmit.disabled = false;
+  }
+}
+
+els.gateSubmit.addEventListener('click', handleGateSubmit);
+els.gateInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') handleGateSubmit();
+});
 
 // ─────────────────────────────────────────────────────────
 // SIDEBAR / HISTORY DRAWER
@@ -178,15 +280,24 @@ els.modalOverlay.addEventListener('click', closeModal);
 async function fetchModels() {
   els.modelSelect.innerHTML = '<option value="">Loading…</option>';
   try {
-    const res = await fetch('/api/models');
+    const res = await fetch('/api/models', {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) {
+      if (res.status === 401) {
+        showGate('Session expired — please enter your password.');
+        return;
+      }
       const body = await safeJson(res);
       throw new Error(friendlyApiError(res.status, body));
     }
     const data = await res.json();
     const models = (data.data || []).map(m => m.id).filter(Boolean).sort();
     els.modelSelect.innerHTML = models.length
-      ? models.map(id => `<option value="${escHtml(id)}">${escHtml(id)}</option>`).join('')
+      ? models.map(id => {
+          const label = escHtml(id) + (isVisionModel(id) ? ' 👁️' : '');
+          return `<option value="${escHtml(id)}">${label}</option>`;
+        }).join('')
       : '<option value="">No models found</option>';
     const saved = LS.get('nim_model', '');
     if (saved && models.includes(saved)) { els.modelSelect.value = saved; state.selectedModel = saved; }
@@ -371,7 +482,6 @@ function loadSession(id) {
   if (!session) return;
   state.activeSessionId = id;
   clearChatUI(false);
-  // Re-render messages
   if (session.messages.length) {
     els.welcomeState.classList.add('hidden');
     session.messages.forEach(msg => {
@@ -379,7 +489,6 @@ function loadSession(id) {
       else if (msg.role === 'assistant') appendAssistantMessageDOM(msg.content, msg.timeTaken);
     });
   }
-  // Sync model
   if (session.model && session.model !== state.selectedModel) {
     state.selectedModel = session.model;
     els.modelSelect.value = session.model;
@@ -421,12 +530,11 @@ els.clearChat.addEventListener('click', () => {
 
 els.newChatBtn.addEventListener('click', () => {
   const session = getActiveSession();
-  if (session && !session.messages.length) return; // already empty
+  if (session && !session.messages.length) return;
   startNewSession();
 });
 
 function clearChatUI(showWelcome = true) {
-  // Remove all message nodes, keep scroll anchor
   const anchor = document.getElementById('scrollAnchor');
   els.messagesList.innerHTML = '';
   if (anchor) els.messagesList.appendChild(anchor);
@@ -569,7 +677,17 @@ function scrollToBottom(force = false) {
 function updateSendBtn() {
   const hasText = els.messageInput.value.trim() !== '';
   const hasFiles = state.pendingFiles.length > 0;
-  els.sendBtn.disabled = (!hasText && !hasFiles) || state.isLoading;
+
+  if (state.isLoading) {
+    // Show stop, hide send
+    els.sendBtn.style.display = 'none';
+    els.stopBtn.classList.add('visible');
+  } else {
+    // Show send, hide stop
+    els.sendBtn.style.display = '';
+    els.stopBtn.classList.remove('visible');
+    els.sendBtn.disabled = !hasText && !hasFiles;
+  }
 }
 
 els.messageInput.addEventListener('input', () => {
@@ -581,11 +699,18 @@ els.messageInput.addEventListener('input', () => {
 els.messageInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    if (!els.sendBtn.disabled) handleSend();
+    if (!els.sendBtn.disabled && !state.isLoading) handleSend();
   }
 });
 
 els.sendBtn.addEventListener('click', handleSend);
+
+// Stop button handler
+els.stopBtn.addEventListener('click', () => {
+  if (state.abortController) {
+    state.abortController.abort();
+  }
+});
 
 // ─────────────────────────────────────────────────────────
 // ERROR PARSING
@@ -777,7 +902,15 @@ async function handleSend() {
     openDrawer();
     return;
   }
-  
+
+  // ── Vision guard ─────────────────────────────────────────
+  const hasImages = files.some(f => f.type === 'image');
+  if (hasImages && !isVisionModel(state.selectedModel)) {
+    showToast('This model does not support images. Please select a vision model (👁️) from the sidebar.', 'error', 6000);
+    openDrawer();
+    return;
+  }
+
   // Ensure active session
   if (!getActiveSession()) startNewSession();
 
@@ -796,11 +929,9 @@ async function handleSend() {
 
   // Build API user content
   let userContent;
-  const hasImages = files.some(f => f.type === 'image');
   const pdfTexts = files.filter(f => f.type === 'pdf').map(f => `[Attached Document: ${f.name}]\n${f.extractedText}`);
 
   if (hasImages) {
-    // Multimodal: array content
     userContent = [];
     if (text) userContent.push({ type: 'text', text });
     files.filter(f => f.type === 'image').forEach(f => {
@@ -828,6 +959,12 @@ async function handleSend() {
 
   const startTime = Date.now();
 
+  // ── AbortController for stop generation ──────────────────
+  const controller = new AbortController();
+  state.abortController = controller;
+
+  let fullText = '';
+
   try {
     // Build messages payload
     const msgs = [{ role: 'system', content: getActiveSystemPrompt() }];
@@ -843,12 +980,22 @@ async function handleSend() {
 
     const res = await fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
 
     if (!res.ok) {
       const body = await safeJson(res);
+      // Re-show gate on 401 from chat endpoint
+      if (res.status === 401) {
+        showGate('Session expired — please enter your password.');
+        // Remove the user message we just pushed
+        if (session) session.messages.pop();
+        saveSessions();
+        removeThinkingDOM();
+        return;
+      }
       if (isMultimodalError(res.status, body)) {
         throw { type: 'multimodal', status: res.status, body };
       }
@@ -875,11 +1022,11 @@ async function handleSend() {
     else els.messagesList.appendChild(wrapper);
     scrollToBottom(true);
 
-    let fullText = '';
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
 
+    // ── SSE streaming read loop ───────────────────────────
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -900,7 +1047,7 @@ async function handleSend() {
             bubble.classList.add('streaming-cursor');
             if (!userScrolledUp) scrollToBottom();
           }
-        } catch { /* ignore */ }
+        } catch { /* ignore malformed SSE chunks */ }
       }
     }
 
@@ -938,18 +1085,38 @@ async function handleSend() {
 
   } catch (err) {
     removeThinkingDOM();
+
+    // ── AbortError = user stopped generation ──────────────
+    if (err && err.name === 'AbortError') {
+      // Save partial text to session (if any was received)
+      const streamingBubble = els.messagesList.querySelector('.streaming-cursor');
+      if (streamingBubble) streamingBubble.classList.remove('streaming-cursor');
+      if (fullText) {
+        const timeTaken = ((Date.now() - startTime) / 1000).toFixed(1);
+        pushMessage({ role: 'assistant', content: fullText + ' _(stopped)_', timeTaken });
+        saveSessions();
+      } else {
+        // No text received — pop the user message we added
+        const sess = getActiveSession();
+        if (sess) sess.messages.pop();
+        saveSessions();
+      }
+      // No error toast — stopping is intentional
+      return;
+    }
+
     // Pop the user message on failure
-    const session = getActiveSession();
-    if (session) session.messages.pop();
+    const sess = getActiveSession();
+    if (sess) sess.messages.pop();
     saveSessions();
 
     if (err?.type === 'multimodal') {
       appendErrorDOM(
         'Model does not support images',
-        'This model does not support image analysis. Please select a multimodal model (e.g. one with "vision" in the name).',
+        'This model does not support image analysis. Please select a vision model (👁️) from the sidebar.',
         `HTTP ${err.status}`
       );
-      showToast('This model does not support image analysis. Please select a multimodal model.', 'error', 6000);
+      showToast('This model does not support image analysis. Select a vision model.', 'error', 6000);
     } else if (err?.type === 'api') {
       const friendly = friendlyApiError(err.status, err.body);
       appendErrorDOM('Request failed', friendly, `HTTP ${err.status}`);
@@ -965,6 +1132,7 @@ async function handleSend() {
       showToast(isNetwork ? 'Connection error' : msg, 'error', 5000);
     }
   } finally {
+    state.abortController = null;
     state.isLoading = false;
     updateSendBtn();
   }
@@ -1021,7 +1189,22 @@ function loadSettings() {
 // ─────────────────────────────────────────────────────────
 (async function init() {
   loadSettings();
+
+  // ── PWA: Register Service Worker ─────────────────────────
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Silently fail if SW registration is unavailable (e.g. HTTP dev)
+    });
+  }
+
+  // ── Password gate probe ───────────────────────────────────
+  // Show gate immediately (opacity 0 → will fade in only if needed)
+  // We probe auth first; if OK we never show it.
+  await initGate();
+
+  // Now load models (gate hidden = auth OK, models can load)
   await fetchModels();
+
   // Ensure at least one active session exists
   if (!getActiveSession()) startNewSession();
 })();

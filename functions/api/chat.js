@@ -2,12 +2,22 @@
  * POST /api/chat
  * Proxies chat completions to NVIDIA NIM — keeps API key server-side.
  * Supports SSE streaming passthrough and structured error responses.
+ * Optionally protected by APP_PASSWORD env variable (checked via X-App-Password header).
  */
 export async function onRequestPost(context) {
   const apiKey = context.env.NVIDIA_NIM_API_KEY;
+  const appPassword = context.env.APP_PASSWORD;
 
   if (!apiKey) {
     return jsonError(500, 'NVIDIA_NIM_API_KEY is not configured on the server.');
+  }
+
+  // ── App-level password gate ──────────────────────────────
+  if (appPassword) {
+    const provided = context.request.headers.get('X-App-Password') || '';
+    if (provided !== appPassword) {
+      return jsonError(401, 'Unauthorized: invalid app password.');
+    }
   }
 
   let body;
@@ -52,7 +62,6 @@ export async function onRequestPost(context) {
   // ── Pass error responses through with their body intact ──
   if (!upstream.ok) {
     const errBody = await upstream.text();
-    // Try to normalise to JSON so the client can parse it
     let parsed;
     try { parsed = JSON.parse(errBody); } catch { parsed = { error: { message: errBody } }; }
     return new Response(JSON.stringify(parsed), {
@@ -95,7 +104,7 @@ export async function onRequestOptions() {
     headers: {
       'Access-Control-Allow-Origin':  '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, X-App-Password',
     },
   });
 }
